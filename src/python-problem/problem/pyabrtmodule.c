@@ -19,6 +19,7 @@
 #include <Python.h>
 
 #include "common.h"
+#include "libabrt.h"
 
 #if PY_MAJOR_VERSION >= 3
   #define MOD_ERROR_VAL NULL
@@ -53,5 +54,17 @@ MOD_INIT
     MOD_DEF(m, "_pyabrt", module_doc, module_methods);
     if (m == NULL)
         return MOD_ERROR_VAL;
+
+    load_abrt_conf();
+
+    /* Include configuration options */
+    PyModule_AddObject(m, "N_MAX_CRASH_REPORTS_SIZE"    , Py_BuildValue("i", g_settings_nMaxCrashReportsSize));
+    PyModule_AddObject(m, "WATCH_CRASHDUMP_ARCHIVE_DIR" , Py_BuildValue("s", g_settings_sWatchCrashdumpArchiveDir));
+    PyModule_AddObject(m, "DUMP_LOCATION"               , Py_BuildValue("s", g_settings_dump_location));
+    PyModule_AddObject(m, "DELETE_UPLOADED"             , Py_BuildValue("b", g_settings_delete_uploaded));
+    PyModule_AddObject(m, "AUTOREPORTING"               , Py_BuildValue("b", g_settings_autoreporting));
+    PyModule_AddObject(m, "AUTOREPORTING_EVENT"         , Py_BuildValue("s", g_settings_autoreporting_event));
+    PyModule_AddObject(m, "SHORTENED_REPORTING"         , Py_BuildValue("b", g_settings_shortenedreporting));
+
     return MOD_SUCCESS_VAL(m);
 }
