@@ -9,8 +9,12 @@ import sys
 import os
 import getopt
 
-from report import dd_opendir, DD_FAIL_QUIETLY_ENOENT, run_event_state
-from reportclient import set_verbosity, error_msg_and_die, error_msg, log1, log
+from report import (dd_opendir,
+                    DD_FAIL_QUIETLY_ENOENT,
+                    run_event_state,
+                    EXIT_STOP_EVENT_RUN,
+                    load_app_conf_file)
+from reportclient import _, set_verbosity, error_msg_and_die, error_msg, log1, log
 
 GETTEXT_PROGNAME = "abrt"
 import locale
@@ -32,6 +36,10 @@ def init_gettext():
     gettext.bindtextdomain(GETTEXT_PROGNAME, '/usr/share/locale')
     gettext.textdomain(GETTEXT_PROGNAME)
 
+from problem import SHORTENED_REPORTING
+
+def conf_to_bool(opt_val):
+    return opt_val and opt_val.lower() in ["yes", "on", "1"]
 
 def spawn_and_wait(prog, *args):
     try:
@@ -73,7 +81,7 @@ def run_event(event_name, dump_dir_name):
 
 def attach_comment_to_ureport(dump_dir_name):
     noninteractive = os.getenv("REPORT_CLIENT_NONINTERACTIVE") or ""
-    if noninteractive.lower() in ["on", "yes", "1"]:
+    if conf_to_bool(noninteractive):
         log1("Current event run is non-interactive: not submitting comment");
         return
 
@@ -149,12 +157,23 @@ if __name__ == "__main__":
     count = try_parse_number(dd, "count")
     dd.close()
 
+    default_exitcode = 0
+
+    appconf = {}
+    try:
+        appconf = load_app_conf_file("abrt-applet")
+    except OSError as ex:
+        log1("Configuration 'abrt-applet' not loaded: {0}".format(ex.message))
+
+    if conf_to_bool(appconf.get("ShortenedReporting",
+                "yes" if SHORTENED_REPORTING else "no")):
+        default_exitcode = EXIT_STOP_EVENT_RUN
+
     # Send only if the problem is not yet reported
     #           if the count file is corrupted or
     #           if the number of ureports is lower then the number of occurrences
     if ureports_counter != 0 and count != 0 and ureports_counter >= count:
         log1("uReport has been already sent: '%s'", dirname)
-        exitcode = 0
         if reported_to and reported_to != "":
             bugs = get_bugzilla_reports(reported_to)
             if bugs:
@@ -162,7 +181,7 @@ if __name__ == "__main__":
                 bugs = sorted(bugs)
                 for bug in bugs:
                     print bug
-                exitcode = 70  # EXIT_STOP_EVENT_RUN
+                default_exitcode = EXIT_STOP_EVENT_RUN
             else:
                 log1("Bug for '%s' not yet filed. Continuing.", dirname)
         else:
@@ -173,7 +192,7 @@ if __name__ == "__main__":
         # from abrt-applet or abrtd when comment is not yet available
         attach_comment_to_ureport(dirname)
 
-        sys.exit(exitcode)
+        sys.exit(default_exitcode)
 
     if report_type == "CCpp" and not core_backtrace_exists:
         exitcode = spawn_and_wait("abrt-action-generate-core-backtrace")
@@ -182,7 +201,7 @@ if __name__ == "__main__":
             sys.exit(1)
 
     exitcode = spawn_and_wait("reporter-ureport")
-    if exitcode == 0 or exitcode == 70:
+    if exitcode == 0 or exitcode == EXIT_STOP_EVENT_RUN:
         dd = dd_opendir(dirname, 0)
         if not dd:
             sys.exit(1)
@@ -193,11 +212,11 @@ if __name__ == "__main__":
         attach_comment_to_ureport(dirname)
 
         watch = os.getenv("uReport_WatchReportedBugs") or ""
-        if exitcode == 70 and watch.lower() in ["yes", "on", "1"]:
+        if exitcode == EXIT_STOP_EVENT_RUN and conf_to_bool(watch):
             if reported_to and reported_to != "" and get_bugzilla_reports(reported_to):
                 log(_("Adding you to CC List of the existing bugzilla bug"))
                 run_event("watch_Bugzilla", dirname)
 
-        sys.exit(exitcode)
+        sys.exit(default_exitcode if exitcode == 0 else exitcode)
     else:
         error_msg_and_die(_("reporter-ureport failed with exit code %d" % exitcode))
