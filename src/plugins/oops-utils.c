@@ -243,6 +243,33 @@ void abrt_oops_save_data_in_dump_dir(struct dump_dir *dd, char *oops, const char
     // TODO: add "Kernel oops: " prefix, so that all oopses have recognizable FILENAME_REASON?
     // kernel oops 1st line may look quite puzzling otherwise...
     strchrnul(second_line, '\n')[0] = '\0';
+    if (((char *pos = strstr("general protection fault: ") != NULL) && isnum(*(pos + strlen("general protection fault: "))))
+            || strstr("kernel paging request at") != NULL)
+    {
+        struct sr_location location;
+        sr_location_init(&location);
+        struct sr_koops_stacktrace *trace = sr_koops_stacktrace_parse(second_line, &location);
+        if (trace && trace->frames && trace->frames->function_name)
+        {
+            char *reason = NULL;
+            if (strstr("general protection fault: ", second_line) == 0)
+                reason = xasprintf("general protection fault in %s", trace->frames->function_name);
+            else if (strstr("request at", second_line) == 0)
+                reason = xasprintf("kernel paging request at %s", trace->frames->function_name);
+            else
+                goto bug_fallback;
+
+            sr_koops_stacktrace_free(trace);
+            dd_save_text(dd, FILENAME_REASON, reason);
+            free(reason);
+            return;
+
+bug_fallback:
+            sr_koops_stacktrace_free(trace);
+            error_msg("BUG: Invalid condition in function %s at line %d in file %s", __func__, __LINE__, __FILE__);
+        }
+    }
+
     dd_save_text(dd, FILENAME_REASON, second_line);
 }
 
