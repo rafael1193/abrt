@@ -153,13 +153,14 @@ static int user_core_fd = -1;
  * %g - gid
  * %t - UNIX time of dump
  * %e - executable filename
+ * %P - global pid
  * %h - hostname
  * %% - output one "%"
  */
 /* Hook must be installed with exactly the same sequence of %c specifiers.
  * Last one, %h, may be omitted (we can find it out).
  */
-static const char percent_specifiers[] = "%scpugteh";
+static const char percent_specifiers[] = "%scpugtePh";
 static char *core_basename = (char*) "core";
 /*
  * Used for error messages only.
@@ -470,9 +471,9 @@ int main(int argc, char** argv)
 
     if (argc < 8)
     {
-        /* percent specifier:         %s   %c              %p  %u  %g  %t   %e          %h */
-        /* argv:                  [0] [1]  [2]             [3] [4] [5] [6]  [7]         [8]*/
-        error_msg_and_die("Usage: %s SIGNO CORE_SIZE_LIMIT PID UID GID TIME BINARY_NAME [HOSTNAME]", argv[0]);
+        /* percent specifier:         %s   %c              %p  %u  %g  %t   %e          %P          %h */
+        /* argv:                  [0] [1]  [2]             [3] [4] [5] [6]  [7]         [8]         [9] */
+        error_msg_and_die("Usage: %s SIGNO CORE_SIZE_LIMIT PID UID GID TIME BINARY_NAME [GLOBALPID] [HOST]", argv[0]);
     }
 
     /* Not needed on 2.6.30.
@@ -521,9 +522,9 @@ int main(int argc, char** argv)
         ulimit_c = ~((off_t)1 << (sizeof(off_t)*8-1));
     }
     const char *pid_str = argv[3];
-    pid_t pid = xatoi_positive(argv[3]);
+    pid_t local_pid = xatoi_positive(argv[3]);
     uid_t uid = xatoi_positive(argv[4]);
-    if (errno || pid <= 0)
+    if (errno || local_pid <= 0)
     {
         perror_msg_and_die("PID '%s' or limit '%s' is bogus", argv[3], argv[2]);
     }
@@ -536,12 +537,14 @@ int main(int argc, char** argv)
         else
             free(s);
     }
+    const char *global_pid_str = argv[8];
+    pid_t pid = xatoi_positive(argv[8]);
 
     struct utsname uts;
-    if (!argv[8]) /* no HOSTNAME? */
+    if (!argv[9]) /* no HOSTNAME? */
     {
         uname(&uts);
-        argv[8] = uts.nodename;
+        argv[9] = uts.nodename;
     }
 
     char path[PATH_MAX];
@@ -666,13 +669,13 @@ int main(int argc, char** argv)
     dd = dd_create(path, fsuid, DEFAULT_DUMP_DIR_MODE);
     if (dd)
     {
-        char *rootdir = get_rootdir(pid);
-
-        dd_create_basic_files(dd, fsuid, (rootdir && strcmp(rootdir, "/") != 0) ? rootdir : NULL);
-
         char source_filename[sizeof("/proc/%lu/somewhat_long_name") + sizeof(long)*3];
-        int source_base_ofs = sprintf(source_filename, "/proc/%lu/smaps", (long)pid);
-        source_base_ofs -= strlen("smaps");
+        int source_base_ofs = sprintf(source_filename, "/proc/%lu/root", (long)pid);
+        source_base_ofs -= strlen("root");
+
+        /* What's wrong on using /proc/[pid]/root every time ?*/
+        dd_create_basic_files(dd, fsuid, /* root */source_filename);
+
         char *dest_filename = concat_path_file(dd->dd_dirname, "also_somewhat_longish_name");
         char *dest_base = strrchr(dest_filename, '/') + 1;
 
@@ -696,9 +699,29 @@ int main(int argc, char** argv)
         copy_file(source_filename, dest_filename, DEFAULT_DUMP_DIR_MODE);
         IGNORE_RESULT(chown(dest_filename, dd->dd_uid, dd->dd_gid));
 
+        strcpy(source_filename + source_base_ofs, "mountinfo");
+        strcpy(dest_base, "mountinfo");
+        copy_file(source_filename, dest_filename, DEFAULT_DUMP_DIR_MODE);
+        IGNORE_RESULT(chown(dest_filename, dd->dd_uid, dd->dd_gid));
+
         strcpy(dest_base, FILENAME_OPEN_FDS);
         if (dump_fd_info(dest_filename, source_filename, source_base_ofs))
             IGNORE_RESULT(chown(dest_filename, dd->dd_uid, dd->dd_gid));
+
+        strcpy(dest_base, FILENAME_NAMESPACES_DIFF);
+        if (dump_namespace_diff(dest_filename, 1, pid))
+            IGNORE_RESULT(chown(dest_filename, dd->dd_uid, dd->dd_gid));
+
+        if (process_is_in_container(pid))
+        {
+            pid_t init_pid;
+            if (get_pid_of_init(pid, &init_pid) == 0)
+            {
+                char *init_cmdline = get_cmdline(init_pid);
+                dd_save_text(dd, FILENAME_INIT_CMDLINE, init_cmdline ? init_cmdline : "");
+                free(init_cmdline);
+            }
+        }
 
         free(dest_filename);
 
@@ -706,14 +729,18 @@ int main(int argc, char** argv)
         dd_save_text(dd, FILENAME_TYPE, "CCpp");
         dd_save_text(dd, FILENAME_EXECUTABLE, executable);
         dd_save_text(dd, FILENAME_PID, pid_str);
+        dd_save_text(dd, "global_pid", global_pid_str);
         dd_save_text(dd, FILENAME_PROC_PID_STATUS, proc_pid_status);
         if (user_pwd)
             dd_save_text(dd, FILENAME_PWD, user_pwd);
+
+        char *rootdir = get_rootdir(pid);
         if (rootdir)
         {
             if (strcmp(rootdir, "/") != 0)
                 dd_save_text(dd, FILENAME_ROOTDIR, rootdir);
         }
+        free(rootdir);
 
         char *reason = xasprintf("%s killed by SIG%s",
                                  last_slash, signame ? signame : signal_str);
@@ -851,7 +878,6 @@ int main(int argc, char** argv)
             trim_problem_dirs(g_settings_dump_location, maxsize * (double)(1024*1024), path);
         }
 
-        free(rootdir);
         return 0;
     }
 
