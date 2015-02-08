@@ -236,10 +236,11 @@ AC_ARG_WITH(bodhi,
 AS_HELP_STRING([--with-bodhi],[use Bodhi plugin (default is YES)]),
 ABRT_PARSE_WITH([bodhi]))
 
-if test -z "$NO_BODHI"
-then
 PKG_CHECK_MODULES([JSON_C], [json-c])
 PKG_CHECK_MODULES([LIBREPORT_WEB], [libreport-web])
+
+if test -z "$NO_BODHI"
+then
 AM_CONDITIONAL(BUILD_BODHI, true)
 else
 AM_CONDITIONAL(BUILD_BODHI, false)

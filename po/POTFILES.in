@@ -32,6 +32,7 @@ src/plugins/abrt-action-generate-backtrace.c
 src/plugins/abrt-action-generate-core-backtrace.c
 src/plugins/abrt-action-install-debuginfo.in
 src/plugins/abrt-action-perform-ccpp-analysis.in
+src/plugins/abrt-action-save-container-data.c
 src/plugins/abrt-action-trim-files.c
 src/plugins/abrt-action-ureport
 src/plugins/abrt-gdb-exploitable

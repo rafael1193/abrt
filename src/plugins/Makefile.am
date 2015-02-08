@@ -24,6 +24,7 @@ bin_PROGRAMS = \
     abrt-action-generate-backtrace \
     abrt-action-generate-core-backtrace \
     abrt-action-analyze-backtrace \
+    abrt-action-save-container-data \
     abrt-retrace-client
 
 if BUILD_BODHI
@@ -287,6 +288,19 @@ abrt_retrace_client_SOURCES = \
      $(LIBREPORT_LIBS) \
      $(SATYR_LIBS) \
      $(NSS_LIBS)
+
+abrt_action_save_container_data_SOURCES = \
+    abrt-action-save-container-data.c
+abrt_action_save_container_data_CPPFLAGS = \
+    -I$(srcdir)/../include \
+    -I$(srcdir)/../lib \
+    $(GLIB_CFLAGS) \
+    $(LIBREPORT_CFLAGS) \
+    $(JSON_C_CFLAGS) \
+    -D_GNU_SOURCE
+abrt_action_save_container_data_LDADD = \
+    $(LIBREPORT_LIBS) \
+    $(JSON_C_LIBS)
 
 if BUILD_BODHI
 abrt_bodhi_SOURCES = \
