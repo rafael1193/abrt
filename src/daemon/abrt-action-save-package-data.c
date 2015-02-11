@@ -176,7 +176,7 @@ static bool is_path_blacklisted(const char *path)
     return false;
 }
 
-static struct pkg_envra *get_script_name(const char *cmdline, char **executable)
+static struct pkg_envra *get_script_name(const char *cmdline, char **executable, const char *chroot)
 {
 // TODO: we don't verify that python executable is not modified
 // or that python package is properly signed
@@ -189,7 +189,7 @@ static struct pkg_envra *get_script_name(const char *cmdline, char **executable)
     char *script_name = get_argv1_if_full_path(cmdline);
     if (script_name)
     {
-        script_pkg = rpm_get_package_nvr(script_name, NULL);
+        script_pkg = rpm_get_package_nvr(script_name, chroot);
         if (script_pkg)
         {
             /* There is a well-formed script name in argv[1],
@@ -204,7 +204,7 @@ static struct pkg_envra *get_script_name(const char *cmdline, char **executable)
     return script_pkg;
 }
 
-static int SavePackageDescriptionToDebugDump(const char *dump_dir_name)
+static int SavePackageDescriptionToDebugDump(const char *dump_dir_name, const char *chroot)
 {
     struct dump_dir *dd = dd_opendir(dump_dir_name, /*flags:*/ 0);
     if (!dd)
@@ -233,7 +233,8 @@ static int SavePackageDescriptionToDebugDump(const char *dump_dir_name)
 
     cmdline = dd_load_text_ext(dd, FILENAME_CMDLINE, DD_FAIL_QUIETLY_ENOENT);
     executable = dd_load_text(dd, FILENAME_EXECUTABLE);
-    rootdir = dd_load_text_ext(dd, FILENAME_ROOTDIR,
+    if (chroot == NULL)
+        chroot = rootdir = dd_load_text_ext(dd, FILENAME_ROOTDIR,
                                DD_FAIL_QUIETLY_ENOENT | DD_LOAD_TEXT_RETURN_NULL_ON_FAILURE);
 
     /* Close dd while we query package database. It can take some time,
@@ -246,7 +247,8 @@ static int SavePackageDescriptionToDebugDump(const char *dump_dir_name)
         goto ret; /* return 1 (failure) */
     }
 
-    pkg_name = rpm_get_package_nvr(executable, rootdir);
+    log("Chroot 1 %s", chroot);
+    pkg_name = rpm_get_package_nvr(executable, chroot);
     if (!pkg_name)
     {
         if (settings_bProcessUnpackaged)
@@ -274,7 +276,8 @@ static int SavePackageDescriptionToDebugDump(const char *dump_dir_name)
      */
     if (g_list_find_custom(settings_Interpreters, basename, (GCompareFunc)g_strcmp0))
     {
-        struct pkg_envra *script_pkg = get_script_name(cmdline, &executable);
+        log("Chroot 2 %s", chroot);
+        struct pkg_envra *script_pkg = get_script_name(cmdline, &executable, chroot);
         /* executable may have changed, check it again */
         if (is_path_blacklisted(executable))
         {
@@ -329,7 +332,7 @@ static int SavePackageDescriptionToDebugDump(const char *dump_dir_name)
          */
     }
 
-    component = rpm_get_component(executable, rootdir);
+    component = rpm_get_component(executable, chroot);
 
     dd = dd_opendir(dump_dir_name, /*flags:*/ 0);
     if (!dd)
@@ -376,23 +379,25 @@ int main(int argc, char **argv)
 
     const char *dump_dir_name = ".";
     const char *conf_filename = NULL;
+    const char *chroot = NULL;
 
     /* Can't keep these strings/structs static: _() doesn't support that */
     const char *program_usage_string = _(
-        "& [-v] [-c CONFFILE] -d DIR\n"
-        "\n"
+        "& [-v] [-c CONFFILE] -d DIR\n" "\n"
         "Query package database and save package and component name"
     );
     enum {
         OPT_v = 1 << 0,
         OPT_d = 1 << 1,
         OPT_c = 1 << 2,
+        OPT_r = 1 << 2,
     };
     /* Keep enum above and order of options below in sync! */
     struct options program_options[] = {
         OPT__VERBOSE(&g_verbose),
         OPT_STRING('d', NULL, &dump_dir_name, "DIR"     , _("Problem directory")),
         OPT_STRING('c', NULL, &conf_filename, "CONFFILE", _("Configuration file")),
+        OPT_STRING('r', "chroot", &chroot,    "CHROOT"  , _("Use this directory as RPM root")),
         OPT_END()
     };
     /*unsigned opts =*/ parse_opts(argc, argv, program_options, program_usage_string);
@@ -413,7 +418,8 @@ int main(int argc, char **argv)
         rpm_load_gpgkey((char*)li->data);
     }
 
-    int r = SavePackageDescriptionToDebugDump(dump_dir_name);
+    log("Chroot %s", chroot);
+    int r = SavePackageDescriptionToDebugDump(dump_dir_name, chroot);
 
     /* Close RPM database */
     rpm_destroy();

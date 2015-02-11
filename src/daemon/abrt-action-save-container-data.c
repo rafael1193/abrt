@@ -121,7 +121,7 @@ int main(int argc, char **argv)
     const char *program_usage_string = _(
         "& [-v] -d DIR\n"
         "\n"
-        "Query package database and save package and component name"
+        "Save container metadata"
     );
     enum {
         OPT_v = 1 << 0,
@@ -141,17 +141,18 @@ int main(int argc, char **argv)
     if (dd == NULL)
         xfunc_die();
 
-    char *init_cmdline = dd_load_text_ext(dd, FILENAME_INIT_CMDLINE, DD_LOAD_TEXT_RETURN_NULL_ON_FAILURE);
-    if (init_cmdline == NULL)
+    char *container_cmdline = dd_load_text_ext(dd, FILENAME_CONTAINER_CMDLINE, DD_LOAD_TEXT_RETURN_NULL_ON_FAILURE);
+    if (container_cmdline == NULL)
         error_msg_and_die("The crash didn't occur in container");
 
-    if (strstr("/docker ", init_cmdline) == 0)
+    if (strstr("/docker ", container_cmdline) == 0)
         dump_docker_info(dd);
-    else if (strstr("/lxc-", init_cmdline) == 0)
-        dump_lxc_info(dd, init_cmdline);
+    else if (strstr("/lxc-", container_cmdline) == 0)
+        dump_lxc_info(dd, container_cmdline);
     else
         error_msg_and_die("Unsupported container technology");
 
+    free(container_cmdline);
     dd_close(dd);
 
     return 0;

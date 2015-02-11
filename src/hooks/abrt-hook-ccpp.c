@@ -674,7 +674,12 @@ int main(int argc, char** argv)
         source_base_ofs -= strlen("root");
 
         /* What's wrong on using /proc/[pid]/root every time ?*/
-        dd_create_basic_files(dd, fsuid, /* root */source_filename);
+        /* - It creates os_info_in_root_dir for all crashes */
+        struct stat root_buf, proc_buf;
+        stat("/", &root_buf);
+        stat(source_filename, &proc_buf);
+
+        dd_create_basic_files(dd, fsuid, proc_buf.st_ino != root_buf.st_ino ? source_filename : NULL);
 
         char *dest_filename = concat_path_file(dd->dd_dirname, "also_somewhat_longish_name");
         char *dest_base = strrchr(dest_filename, '/') + 1;
@@ -712,14 +717,36 @@ int main(int argc, char** argv)
         if (dump_namespace_diff(dest_filename, 1, pid))
             IGNORE_RESULT(chown(dest_filename, dd->dd_uid, dd->dd_gid));
 
-        if (process_is_in_container(pid))
+        int containerized = 0;
+        char *tmp = NULL;
+        get_env_variable(pid, "container", &tmp);
+        if (tmp != NULL)
         {
-            pid_t init_pid;
-            if (get_pid_of_init(pid, &init_pid) == 0)
+            containerized = 1;
+            dd_save_text(dd, "container", tmp);
+            free(tmp);
+            tmp = NULL;
+        }
+
+        get_env_variable(pid, "container_uuid", &tmp);
+        if (tmp != NULL)
+        {
+            containerized = 1;
+            dd_save_text(dd, "container_uuid", tmp);
+            free(tmp);
+        }
+
+        if (!containerized && process_is_fully_isolated(pid))
+            containerized = 1;
+
+        if (containerized)
+        {
+            pid_t container_pid;
+            if (get_pid_of_container(pid, &container_pid) == 0)
             {
-                char *init_cmdline = get_cmdline(init_pid);
-                dd_save_text(dd, FILENAME_INIT_CMDLINE, init_cmdline ? init_cmdline : "");
-                free(init_cmdline);
+                char *container_cmdline = get_cmdline(container_pid);
+                dd_save_text(dd, FILENAME_CONTAINER_CMDLINE, container_cmdline);
+                free(container_cmdline);
             }
         }
 
@@ -857,7 +884,26 @@ int main(int argc, char** argv)
          * Classic deadlock.
          */
         dd_close(dd);
+
         path[path_len] = '\0'; /* path now contains only directory name */
+
+        if (containerized)
+        {
+            sprintf(source_filename, "/proc/%lu/root", (long)pid);
+
+            const char *cmd_args[6];
+            cmd_args[0] = BIN_DIR"/abrt-action-save-package-data";
+            cmd_args[1] = "-d";
+            cmd_args[2] = path;
+            cmd_args[3] = "-r";
+            cmd_args[4] = source_filename;
+            cmd_args[5] = NULL;
+
+            pid_t pid = fork_execv_on_steroids(0, (char **)cmd_args, NULL, NULL, path, 0);
+            int stat;
+            safe_waitpid(pid, &stat, 0);
+        }
+
         char *newpath = xstrndup(path, path_len - (sizeof(".new")-1));
         if (rename(path, newpath) == 0)
             strcpy(path, newpath);
