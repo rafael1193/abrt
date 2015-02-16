@@ -160,6 +160,7 @@ This package contains hook for C/C++ crashed programs.
 %package addon-ccpp
 Summary: %{name}'s C/C++ addon
 Group: System Environment/Libraries
+BuildRequires: %{libjson_devel}
 Requires: cpio
 Requires: gdb >= 7.6.1-63
 Requires: elfutils
