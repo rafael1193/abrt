@@ -498,6 +498,7 @@ int main(int argc, char** argv)
     /* ... and plugins/CCpp.conf */
     bool setting_MakeCompatCore;
     bool setting_SaveBinaryImage;
+    bool setting_StandaloneHook;
     {
         map_string_t *settings = new_map_string();
         load_abrt_plugin_conf_file("CCpp.conf", settings);
@@ -506,6 +507,8 @@ int main(int argc, char** argv)
         setting_MakeCompatCore = value && string_to_bool(value);
         value = get_map_string_item_or_NULL(settings, "SaveBinaryImage");
         setting_SaveBinaryImage = value && string_to_bool(value);
+        value = get_map_string_item_or_NULL(settings, "StandaloneHook");
+        setting_StandaloneHook = value && string_to_bool(value);
         value = get_map_string_item_or_NULL(settings, "VerboseLog");
         if (value)
             g_verbose = xatoi_positive(value);
@@ -607,7 +610,8 @@ int main(int argc, char** argv)
         default: goto create_user_core; // not a signal we care about
     }
 
-    if (!daemon_is_ok())
+    const int abrtd_running = daemon_is_ok();
+    if (!setting_StandaloneHook && !abrtd_running)
     {
         /* not an error, exit with exit code 0 */
         log("abrtd is not running. If it crashed, "
@@ -887,8 +891,8 @@ int main(int argc, char** argv)
 
         path[path_len] = '\0'; /* path now contains only directory name */
 
-        if (containerized)
-        {
+        if (abrtd_running && containerized)
+        {   /* Do we really need to run rpm from core_pattern hook? */
             sprintf(source_filename, "/proc/%lu/root", (long)pid);
 
             const char *cmd_args[6];
@@ -911,7 +915,8 @@ int main(int argc, char** argv)
 
         log("Saved core dump of pid %lu (%s) to %s (%llu bytes)", (long)pid, executable, path, (long long)core_size);
 
-        notify_new_path(path);
+        if (abrtd_running)
+            notify_new_path(path);
 
         /* rhbz#539551: "abrt going crazy when crashing process is respawned" */
         if (g_settings_nMaxCrashReportsSize > 0)
