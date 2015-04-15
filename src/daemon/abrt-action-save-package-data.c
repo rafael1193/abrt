@@ -189,7 +189,6 @@ static int SavePackageDescriptionToDebugDump(const char *dump_dir_name)
 
     char *cmdline = NULL;
     char *executable = NULL;
-    char *rootdir = NULL;
     char *script_name = NULL; /* only if "interpreter /path/to/script" */
     char *package_short_name = NULL;
     char *package_full_name = NULL;
@@ -210,8 +209,6 @@ static int SavePackageDescriptionToDebugDump(const char *dump_dir_name)
     {
         cmdline = dd_load_text(dd, FILENAME_CMDLINE);
         executable = dd_load_text(dd, FILENAME_EXECUTABLE);
-        rootdir = dd_load_text_ext(dd, FILENAME_ROOTDIR,
-                DD_FAIL_QUIETLY_ENOENT | DD_LOAD_TEXT_RETURN_NULL_ON_FAILURE);
 
         /* Close dd while we query package database. It can take some time,
          * don't want to keep dd locked longer than necessary */
@@ -223,7 +220,7 @@ static int SavePackageDescriptionToDebugDump(const char *dump_dir_name)
             goto ret; /* return 1 (failure) */
         }
 
-        package_full_name = rpm_get_package_nvr(executable, rootdir);
+        package_full_name = rpm_get_package_nvr(executable, NULL);
         if (!package_full_name)
         {
             if (settings_bProcessUnpackaged)
@@ -314,7 +311,7 @@ static int SavePackageDescriptionToDebugDump(const char *dump_dir_name)
              */
         }
 
-        component = rpm_get_component(executable, rootdir);
+        component = rpm_get_component(executable, NULL);
 
         dd = dd_opendir(dump_dir_name, /*flags:*/ 0);
         if (!dd)
@@ -337,7 +334,6 @@ static int SavePackageDescriptionToDebugDump(const char *dump_dir_name)
  ret:
     free(cmdline);
     free(executable);
-    free(rootdir);
     free(script_name);
     free(package_short_name);
     free(package_full_name);
