@@ -22,6 +22,7 @@ char *        g_settings_sWatchCrashdumpArchiveDir = NULL;
 unsigned int  g_settings_nMaxCrashReportsSize = 1000;
 char *        g_settings_dump_location = NULL;
 bool          g_settings_delete_uploaded = 0;
+bool          g_settings_privatereports = true;
 
 void free_abrt_conf_data()
 {
@@ -70,6 +71,13 @@ static void ParseCommon(map_string_h *settings, const char *conf_filename)
     {
         g_settings_delete_uploaded = string_to_bool(value);
         g_hash_table_remove(settings, "DeleteUploaded");
+    }
+
+    value = g_hash_table_lookup(settings, "PrivateReports");
+    if (value)
+    {
+        g_settings_privatereports = string_to_bool(value);
+        g_hash_table_remove(settings, "PrivateReports");
     }
 
     GHashTableIter iter;
