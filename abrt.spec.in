@@ -481,11 +481,7 @@ to the shell
 %build
 autoconf
 
-%if 0%{?rhel:%{rhel} < 7}%{?fedora:%{fedora} < 18}
-    %define var_base_dir spool
-%else
-    %define var_base_dir tmp
-%endif
+%define var_base_dir spool
 
 CFLAGS="%{optflags} -Werror" %configure \
 %if 0%{?suse_version}
@@ -493,9 +489,6 @@ CFLAGS="%{optflags} -Werror" %configure \
 %endif
 %if %{without bodhi}
         --without-bodhi \
-%endif
-%if 0%{?rhel:%{rhel} < 7}%{?fedora:%{fedora} < 18}
-        --with-defaultdumplocation=/var/%{var_base_dir}/abrt \
 %endif
 %if 0%{?rhel}
         --enable-suggest-autoreporting \
