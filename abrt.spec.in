@@ -40,6 +40,9 @@ BuildRequires: btparser-devel
 BuildRequires: elfutils-devel
 BuildRequires: elfutils-libelf-devel
 BuildRequires: binutils-devel
+BuildRequires: libselinux-devel
+
+Requires: libreport >=  2.0.9-21
 
 %if %{with systemd}
 Requires: systemd-units
