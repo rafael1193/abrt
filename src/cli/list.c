@@ -101,6 +101,10 @@ int cmd_list(int argc, const char **argv)
     };
 
     parse_opts(argc, (char **)argv, program_options, program_usage_string);
+
+    load_abrt_conf();
+    restart_as_root_if_needed(argc, argv);
+
     argv += optind;
 
     GList *D_list = NULL;
@@ -143,10 +147,14 @@ int cmd_info(int argc, const char **argv)
     };
 
     parse_opts(argc, (char **)argv, program_options, program_usage_string);
-    argv += optind;
 
-    if (!argv[0])
+    if (!argv[optind])
         show_usage_and_die(program_usage_string, program_options);
+
+    load_abrt_conf();
+    restart_as_root_if_needed(argc, argv);
+
+    argv += optind;
 
     int errs = 0;
     while (*argv)
