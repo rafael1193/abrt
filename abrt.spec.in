@@ -307,6 +307,21 @@ Requires: abrt-dbus
 This package contains a simple command line client for processing abrt reports
 in command line environment.
 
+%package cli-ng
+Summary: %{name}'s improved command line interface
+Group: User Interface/Desktops
+Requires: %{name} = %{version}-%{release}
+Requires: libreport-cli >= %{libreport_ver}
+Requires: abrt-libs = %{version}-%{release}
+Requires: abrt-dbus
+Requires: abrt-python
+Requires: python-argh
+Requires: python-argcomplete
+Requires: python-humanize
+
+%description cli-ng
+New generation command line interface for ABRT
+
 %package cli
 Summary: Virtual package to make easy default installation on non-graphical environments
 Group: Applications/System
@@ -1004,6 +1019,12 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 %defattr(-,root,root,-)
 %{_bindir}/abrt-cli
 %{_mandir}/man1/abrt-cli.1.gz
+
+%files cli-ng
+%defattr(-,root,root,-)
+%config(noreplace) %{_sysconfdir}/bash_completion.d/abrt.bash_completion
+%{_bindir}/abrt
+%{python_sitearch}/abrtcli/
 
 %files desktop
 %defattr(-,root,root,-)
